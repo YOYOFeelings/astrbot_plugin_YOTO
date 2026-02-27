@@ -12,12 +12,12 @@ class Database:
 
     def _init_db(self):
         with sqlite3.connect(self.db_path) as conn:
-            # 检查是否需要迁移
-            cursor = conn.execute("PRAGMA table_info(users)")
-            columns = [col[1] for col in cursor.fetchall()]
-            if "group_id" not in columns:
-                logger.warning("检测到数据库需要迁移以支持群隔离，正在进行自动迁移...")
-                conn.execute("ALTER TABLE users RENAME TO users_old")
+            # 检查 users 表是否存在
+            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+            table_exists = cursor.fetchone() is not None
+
+            if not table_exists:
+                # 直接创建新表，无需迁移
                 conn.execute("""
                     CREATE TABLE users (
                         group_id TEXT NOT NULL,
@@ -30,15 +30,37 @@ class Database:
                         PRIMARY KEY (group_id, user_id)
                     )
                 """)
-                conn.execute("""
-                    INSERT INTO users (group_id, user_id, points, sign_count, last_sign_time, continuous_days, immunity_cards)
-                    SELECT '0', user_id, points, sign_count, last_sign_time, continuous_days, immunity_cards FROM users_old
-                """)
-                conn.execute("DROP TABLE users_old")
-                logger.info("数据库迁移完成，旧数据已放入群ID '0'，请根据需要调整。")
+                logger.info("users 表创建成功")
             else:
-                pass
+                # 表已存在，检查是否需要迁移（group_id 列是否存在）
+                cursor = conn.execute("PRAGMA table_info(users)")
+                columns = [col[1] for col in cursor.fetchall()]
+                if "group_id" not in columns:
+                    logger.warning("检测到数据库需要迁移以支持群隔离，正在进行自动迁移...")
+                    conn.execute("ALTER TABLE users RENAME TO users_old")
+                    conn.execute("""
+                        CREATE TABLE users (
+                            group_id TEXT NOT NULL,
+                            user_id TEXT NOT NULL,
+                            points INTEGER DEFAULT 0,
+                            sign_count INTEGER DEFAULT 0,
+                            last_sign_time INTEGER DEFAULT 0,
+                            continuous_days INTEGER DEFAULT 0,
+                            immunity_cards INTEGER DEFAULT 0,
+                            PRIMARY KEY (group_id, user_id)
+                        )
+                    """)
+                    conn.execute("""
+                        INSERT INTO users (group_id, user_id, points, sign_count, last_sign_time, continuous_days, immunity_cards)
+                        SELECT '0', user_id, points, sign_count, last_sign_time, continuous_days, immunity_cards FROM users_old
+                    """)
+                    conn.execute("DROP TABLE users_old")
+                    logger.info("数据库迁移完成，旧数据已放入群ID '0'，请根据需要调整。")
+                else:
+                    # 表结构已正确，无需操作
+                    pass
 
+            # 创建其他表（保持不变）
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS shop_items (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
