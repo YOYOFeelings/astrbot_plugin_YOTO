@@ -12,7 +12,7 @@ class Database:
 
     def _init_db(self):
         with sqlite3.connect(self.db_path) as conn:
-            # 首先检查 users 表是否存在
+            # 1. 检查 users 表是否存在
             cursor = conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='users'"
             )
@@ -34,12 +34,32 @@ class Database:
                 """)
                 logger.info("users 表创建成功")
             else:
-                # 表已存在，检查是否需要迁移（group_id 列是否存在）
-                try:
-                    cursor = conn.execute("PRAGMA table_info(users)")
-                    columns = [col[1] for col in cursor.fetchall()]
-                    if "group_id" not in columns:
-                        logger.warning("检测到数据库需要迁移以支持群隔离，正在进行自动迁移...")
+                # 表已存在，检查是否需要添加 group_id 列
+                cursor = conn.execute("PRAGMA table_info(users)")
+                columns = [col[1] for col in cursor.fetchall()]
+                if "group_id" not in columns:
+                    logger.warning("检测到数据库需要迁移以支持群隔离，正在进行自动迁移...")
+                    # 再次确认表仍然存在（防止并发问题）
+                    cursor_check = conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name='users'"
+                    )
+                    if cursor_check.fetchone() is None:
+                        # 表已被删除，重新创建
+                        conn.execute("""
+                            CREATE TABLE users (
+                                group_id TEXT NOT NULL,
+                                user_id TEXT NOT NULL,
+                                points INTEGER DEFAULT 0,
+                                sign_count INTEGER DEFAULT 0,
+                                last_sign_time INTEGER DEFAULT 0,
+                                continuous_days INTEGER DEFAULT 0,
+                                immunity_cards INTEGER DEFAULT 0,
+                                PRIMARY KEY (group_id, user_id)
+                            )
+                        """)
+                        logger.info("users 表已重新创建")
+                    else:
+                        # 执行迁移
                         conn.execute("ALTER TABLE users RENAME TO users_old")
                         conn.execute("""
                             CREATE TABLE users (
@@ -59,25 +79,8 @@ class Database:
                         """)
                         conn.execute("DROP TABLE users_old")
                         logger.info("数据库迁移完成，旧数据已放入群ID '0'，请根据需要调整。")
-                except sqlite3.OperationalError as e:
-                    # 如果出现异常（例如表结构损坏），则重新创建表
-                    logger.error(f"迁移时出错：{e}，将重新创建 users 表")
-                    conn.execute("DROP TABLE IF EXISTS users")
-                    conn.execute("""
-                        CREATE TABLE users (
-                            group_id TEXT NOT NULL,
-                            user_id TEXT NOT NULL,
-                            points INTEGER DEFAULT 0,
-                            sign_count INTEGER DEFAULT 0,
-                            last_sign_time INTEGER DEFAULT 0,
-                            continuous_days INTEGER DEFAULT 0,
-                            immunity_cards INTEGER DEFAULT 0,
-                            PRIMARY KEY (group_id, user_id)
-                        )
-                    """)
-                    logger.info("users 表已重新创建")
 
-            # 创建其他表（保持不变）
+            # 2. 创建其他表（保持不变）
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS shop_items (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -143,7 +146,6 @@ class Database:
             conn.execute("UPDATE users SET points = points + ? WHERE group_id=? AND user_id=?", (points, group_id, user_id))
             conn.commit()
 
-    # ---------- 商品相关 ----------
     def get_shop_items(self) -> List[Dict]:
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
@@ -185,7 +187,6 @@ class Database:
             conn.execute("UPDATE shop_items SET last_reset_day = ?", (today,))
             conn.commit()
 
-    # ---------- 购买记录 ----------
     def add_purchase(self, user_id: str, item_id: int, quantity: int = 1) -> int:
         now = int(datetime.now().timestamp())
         with sqlite3.connect(self.db_path) as conn:
@@ -219,7 +220,6 @@ class Database:
             )
             conn.commit()
 
-    # ---------- 禁言记录 ----------
     def add_mute_record(self, user_id: str, group_id: str, operator: str, reason: str,
                         duration: int, start_time: int, end_time: int):
         with sqlite3.connect(self.db_path) as conn:
@@ -245,7 +245,6 @@ class Database:
             row = cur.fetchone()
             return dict(row) if row else None
 
-    # ---------- 排行榜 ----------
     def get_points_rank(self, group_id: str, limit: int = 20) -> List[Tuple[str, int]]:
         with sqlite3.connect(self.db_path) as conn:
             cur = conn.execute(
