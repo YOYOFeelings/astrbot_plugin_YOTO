@@ -120,7 +120,7 @@
       "menu_title": {
         "description": "菜单标题",
         "type": "string",
-        "default": "登皮bot",
+        "default": "感情不是感",
         "hint": "显示在菜单顶部的标题"
       },
       "menu_extra_center": {
