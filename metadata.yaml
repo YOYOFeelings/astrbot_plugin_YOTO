@@ -1,0 +1,10 @@
+name: astrbot_plugin_YOTO
+desc:  QQ群多功能插件
+author: 感情
+version: 1.5
+display_name: QQ群管理插件   # 可根据需要改为 "QQ群管理插件"
+repo: https://github.com/YOYOFeelings/astrbot_plugin_YOTO
+tags:
+  - QQ群管理
+support_platforms:
+  - aiocqhttp
