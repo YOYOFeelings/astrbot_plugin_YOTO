@@ -9,7 +9,7 @@ import random
 import time
 import re
 import aiohttp
-import zipfile  # 用于压缩文件
+import zipfile
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any, Union
 
@@ -120,8 +120,8 @@ ADMIN_CATEGORIES = [
 @register(
     name="astrbot_plugin_multigroup",
     author="感情",
-    desc="QQ号多功能群管理",
-    version="1.5"
+    desc="多功能群管理（签到、积分、刷屏检测、视频解析、图片菜单 + 群管功能 + 个人信息图片 + 撤回 + 宵禁）",
+    version="3.6.0"
 )
 class MultiGroupPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
@@ -1010,9 +1010,10 @@ class MultiGroupPlugin(Star):
             return None
 
     # ==================== 增强的 _get_target_ids ====================
-    async def _get_target_ids(self, event: AiocqhttpMessageEvent, args: str, allow_nickname: bool = True) -> List[str]:
+    async def _get_target_ids(self, event: AiocqhttpMessageEvent, args: str, allow_nickname: bool = True, allow_number_id: bool = True) -> List[str]:
         """
         从命令参数中提取目标QQ号列表，支持真正的@、纯数字以及手动输入的昵称（以@开头）。
+        :param allow_number_id: 是否允许将参数中的纯数字作为目标ID
         返回用户ID列表（字符串）。
         """
         # 1. 获取真正的@
@@ -1020,11 +1021,12 @@ class MultiGroupPlugin(Star):
         ats = get_ats(event)
         target_ids.extend(ats)
 
-        # 2. 再从参数中解析数字（排除已存在的ID）
-        for part in args.split():
-            part = part.strip()
-            if part.isdigit() and part not in target_ids:
-                target_ids.append(part)
+        # 2. 如果允许，再从参数中解析数字（排除已存在的ID）
+        if allow_number_id:
+            for part in args.split():
+                part = part.strip()
+                if part.isdigit() and part not in target_ids:
+                    target_ids.append(part)
 
         # 3. 如果 allow_nickname 为 True 且没有找到任何目标，尝试解析昵称
         if allow_nickname and not target_ids:
@@ -1046,7 +1048,8 @@ class MultiGroupPlugin(Star):
             await event.send(event.plain_result("禁言功能已关闭"))
             event.stop_event()
             return
-        target_ids = await self._get_target_ids(event, args, allow_nickname=True)
+        # 禁言命令中，不允许将参数中的纯数字作为目标ID（防止把时长误当作QQ号）
+        target_ids = await self._get_target_ids(event, args, allow_nickname=True, allow_number_id=False)
         if not target_ids:
             await event.send(event.plain_result("请提供要禁言的QQ号、真正的@用户或输入“禁言 @昵称 [秒数]”"))
             event.stop_event()
@@ -1074,7 +1077,8 @@ class MultiGroupPlugin(Star):
             await event.send(event.plain_result("解禁功能已关闭"))
             event.stop_event()
             return
-        target_ids = await self._get_target_ids(event, args, allow_nickname=True)
+        # 解禁命令允许数字作为目标ID
+        target_ids = await self._get_target_ids(event, args, allow_nickname=True, allow_number_id=True)
         if not target_ids:
             await event.send(event.plain_result("请提供要解禁的QQ号、真正的@用户或输入“解禁 @昵称”"))
             event.stop_event()
@@ -1095,7 +1099,8 @@ class MultiGroupPlugin(Star):
             await event.send(event.plain_result("踢人功能已关闭"))
             event.stop_event()
             return
-        target_ids = await self._get_target_ids(event, args, allow_nickname=True)
+        # 踢人命令允许数字作为目标ID
+        target_ids = await self._get_target_ids(event, args, allow_nickname=True, allow_number_id=True)
         if not target_ids:
             await event.send(event.plain_result("请提供要踢出的QQ号、真正的@用户或输入“踢人 @昵称”"))
             event.stop_event()
@@ -1116,7 +1121,8 @@ class MultiGroupPlugin(Star):
             await event.send(event.plain_result("拉黑功能已关闭"))
             event.stop_event()
             return
-        target_ids = await self._get_target_ids(event, args, allow_nickname=True)
+        # 拉黑命令允许数字作为目标ID
+        target_ids = await self._get_target_ids(event, args, allow_nickname=True, allow_number_id=True)
         if not target_ids:
             await event.send(event.plain_result("请提供要拉黑的QQ号、真正的@用户或输入“拉黑 @昵称”"))
             event.stop_event()
@@ -1150,8 +1156,8 @@ class MultiGroupPlugin(Star):
             event.stop_event()
             return
 
-        # 2. 否则尝试获取目标用户（@、数字、昵称）
-        target_ids = await self._get_target_ids(event, args, allow_nickname=True)
+        # 2. 否则尝试获取目标用户（@、数字、昵称）- 允许数字作为目标ID
+        target_ids = await self._get_target_ids(event, args, allow_nickname=True, allow_number_id=True)
         if not target_ids:
             await event.send(event.plain_result("请使用真正的@（点击成员）、引用一条消息，或者输入“撤回 @昵称 [数量]”来指定要撤回谁的消息"))
             event.stop_event()
