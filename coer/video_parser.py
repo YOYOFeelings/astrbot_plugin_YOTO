@@ -1,3 +1,4 @@
+# coer/video_parser.py
 import re
 from typing import Optional, Dict
 
@@ -34,7 +35,8 @@ DOMAIN_PLATFORM_MAP = {
     'xhslink.com': 'xiaohongshu',
     'weibo.com': 'weibo',
     'toutiao.com': 'toutiao',
-    'pipixia.com': 'pipixia'
+    'pipixia.com': 'pipixia',
+    'pipix.com': 'pipixia',  # <--- 添加这一行，识别移动端短链接
 }
 
 def extract_url(text: str) -> Optional[str]:
